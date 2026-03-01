@@ -1,8 +1,8 @@
-import { Project } from "../models/projects.models";
+import { Project } from "../models/projects.models.js";
 import { User } from '../models/user.models.js';
 
 const createProject = async(req,res) => {
-    const {title, description} = req.body;
+    const {title = "", description = ""} = req.body;
 
     if([title, description].some((field) => field.trim() == '')) {
         return res.status(400)
@@ -11,12 +11,34 @@ const createProject = async(req,res) => {
         })
     }
 
+    const doesOwnerHaveAProject = await Project.findOne({owner: req.user._id});
+
+    if(doesOwnerHaveAProject) {
+        return res.status(400)
+        .json({
+            message: "You already have a project pending."
+        })
+    }
+
+    
     const createdProject = await Project.create({
         title,
         description,
         owner: req.user._id
     })
 
+    const user = await User.findByIdAndUpdate(
+        req.user._id,
+        {$set: {currentProject: createdProject._id}},
+        {new:true}
+    )
+
+    await Project.findByIdAndUpdate(
+        createdProject._id,
+        {$push: {members: user._id}},
+        {new:true}
+    )
+    
     return res.status(201)
     .json({
         message: 'Project created successfully.',
@@ -33,8 +55,8 @@ const deleteProject = async(req,res) => {
 }
 
 const renameProject = async(req,res) => {
-    const {name} = req.body;
-    if(name.trim() == '') {
+    const {title = ""} = req.body;
+    if(title.trim() == '') {
         return res.status(400)
         .json({
             message: 'Name is required.'
@@ -43,7 +65,7 @@ const renameProject = async(req,res) => {
 
     const updatedProject = await Project.findOneAndUpdate(
         {owner: req.user._id},
-        {$set: { name } },
+        {$set: { title } },
         { new: true }
     );
 
@@ -72,19 +94,72 @@ const fetchMembers = async(req,res) => {
 
 const addMembers = async(req,res) => {
     const {id} = req.params;
+    // console.log(id);
+    const user = await User.findById(id);
+    // console.log(user);
 
-    const user = User.findById(id);
-
-    const updatedMembers = Project.findOneAndUpdate(
+    //Add a validation for checking whether the user is present in the members array list or not.
+    const updatedMembersProject = await Project.findOneAndUpdate(
         {owner: req.user._id},
-        {$set: {members: [...members, user]}}
+        {$push: {members: user._id} },
+        {new: true}
     );
+
+    await User.findByIdAndUpdate(
+        id,
+        {$set: {currentProject: updatedMembersProject}},
+        {new:true}
+    )
 
     return res.status(200)
     .json({
         message: 'Member is successfully added.',
+        updatedMembersProject
+    })
+}
+
+const deleteMembers = async(req,res) => {
+    const {id} = req.params;
+
+    const project = await Project.findOne({owner: req.user._id});
+    
+    const members = project.members;
+    // console.log(members);
+
+    const user = await User.findById(id);
+
+    const updatedMembers = await Project.findOneAndUpdate(
+        {owner: req.user._id},
+        {$pull: {members : user._id}},
+        {new : true}
+    )
+
+    return res.status(200)
+    .json({
+        message: "Member deleted successfully.",
         updatedMembers
     })
 }
 
-export {createProject, deleteProject, renameProject, fetchMembers, addMembers};
+const getAllMembersOfAProject = async(req,res) => {
+    const {projectid} = req.params;
+
+    const project = await Project.findById(projectid);
+
+    if(!project) {
+        return res.status(400)
+        .json({
+            message: 'Project could not be found.'
+        })
+    }
+
+    const members = project.members;
+
+    return res.status(200)
+    .json({
+        message: 'Members fetched successfully.',
+        members
+    })
+}
+
+export {createProject, deleteProject, renameProject, fetchMembers, addMembers, deleteMembers, getAllMembersOfAProject}

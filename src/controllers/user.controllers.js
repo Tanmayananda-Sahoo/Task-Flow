@@ -1,7 +1,7 @@
 import {User} from '../models/user.models.js';
 
 const register = async(req,res) => {
-    const {name, email, password} = req.body;
+    const {name = "", email = "", password = ""} = req.body;
     if([name, email, password].some((field) => field.trim() == '')) {
         return res.status(401)
         .json({
@@ -50,7 +50,7 @@ const register = async(req,res) => {
 }
 
 const login = async(req,res) => {
-    const {email, password} = req.body;
+    const {email = "", password = ""} = req.body;
     if([email, password].some((field) => field.trim() == '')) {
         return res.status(401)
         .json({
